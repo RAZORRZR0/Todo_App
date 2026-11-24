@@ -6,7 +6,7 @@
     "private": true,
     "scripts": {
         "start": "node server.js",
-        "test": "node --test --test-concurrency=1 test/",
+        "test": "node --test --test-concurrency=1 test/*.test.js",
         "create-admin": "node scripts/create_admin.js"
     },
     "engines": {
