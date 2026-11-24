@@ -6,6 +6,8 @@ Collaborative checklist notes with live sync, edit-conflict detection, image att
 
 Built during an internship at NHPC.
 
+**Live demo: https://todo-notes-i6tx.onrender.com** (log in as `demo` / `demo-pass-2026`; the free instance may take ~50 s to wake up)
+
 ![Notes grid](docs/screenshot.png)
 
 ## Features
