@@ -4,6 +4,7 @@ services:
     name: todo-notes
     runtime: node
     plan: free
+    region: singapore # close to the Atlas cluster in Mumbai
     buildCommand: npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /healthz
