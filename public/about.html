@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - Todo App</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        surface: '#FFFFFF',
+                        'surface-variant': '#F1F5F9',
+                        primary: '#0056D2',
+                        'on-primary': '#FFFFFF',
+                        secondary: '#000000',
+                        error: '#DC2626'
+                    },
+                    borderRadius: {
+                        'xl': '28px',
+                        '2xl': '32px'
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #F8FAFC;
+        }
+
+        .btn-anim {
+            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);
+        }
+
+        .btn-anim:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-anim:active {
+            transform: scale(0.97);
+        }
+
+        /* Page Transition */
+        body {
+            transition: opacity 0.1s ease-in-out;
+        }
+    </style>
+</head>
+
+<body class="text-gray-800 min-h-screen flex flex-col opacity-0">
+
+    <!-- Header -->
+    <header
+        class="px-6 py-4 flex justify-between items-center bg-[#F8FAFC]/90 backdrop-blur sticky top-0 z-10 border-b border-gray-200">
+        <h1 class="text-2xl font-normal text-gray-800">About Project</h1>
+        <a href="/"
+            class="btn-anim text-primary font-medium px-4 py-2 hover:bg-white/50 rounded-full transition-colors">Back to
+            App</a>
+    </header>
+
+    <main class="flex-1 max-w-4xl mx-auto w-full p-6 space-y-8">
+
+        <!-- Intro -->
+        <section class="bg-white p-8 rounded-[28px] shadow-sm">
+            <h2 class="text-3xl font-medium mb-4 text-primary">Overview</h2>
+            <p class="text-gray-600 leading-relaxed text-lg">
+                This Todo and Note-taking application is a demonstration of a modern, full-stack web application.
+                It is designed to be robust, secure, and user-friendly, showcasing a clean architecture and responsive
+                design.
+            </p>
+        </section>
+
+        <!-- Tech Stack -->
+        <section class="grid md:grid-cols-2 gap-6">
+            <div class="bg-white p-8 rounded-[28px] shadow-sm">
+                <h3 class="text-xl font-medium mb-6 text-gray-800 flex items-center gap-2">
+                    <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z">
+                        </path>
+                    </svg>
+                    Frontend
+                </h3>
+                <ul class="space-y-4">
+                    <li class="flex flex-col">
+                        <span class="font-medium">HTML5 & CSS3</span>
+                        <span class="text-gray-500 text-sm">Semantic structure and styling</span>
+                    </li>
+                    <li class="flex flex-col">
+                        <span class="font-medium">Tailwind CSS</span>
+                        <span class="text-gray-500 text-sm">Utility-first CSS framework for rapid UI development</span>
+                    </li>
+                    <li class="flex flex-col">
+                        <span class="font-medium">Vanilla JavaScript</span>
+                        <span class="text-gray-500 text-sm">Core logic for UI updates and API interaction</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="bg-white p-8 rounded-[28px] shadow-sm">
+                <h3 class="text-xl font-medium mb-6 text-gray-800 flex items-center gap-2">
+                    <svg class="w-6 h-6 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01">
+                        </path>
+                    </svg>
+                    Backend
+                </h3>
+                <ul class="space-y-4">
+                    <li class="flex flex-col">
+                        <span class="font-medium">Node.js</span>
+                        <span class="text-gray-500 text-sm">Runtime environment</span>
+                    </li>
+                    <li class="flex flex-col">
+                        <span class="font-medium">Express.js</span>
+                        <span class="text-gray-500 text-sm">Web framework for handling routes and requests</span>
+                    </li>
+                    <li class="flex flex-col">
+                        <span class="font-medium">MongoDB</span>
+                        <span class="text-gray-500 text-sm">NoSQL database for data persistence</span>
+                    </li>
+                    <li class="flex flex-col">
+                        <span class="font-medium">Mongoose</span>
+                        <span class="text-gray-500 text-sm">ODM for modeling application data</span>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Key Features -->
+        <section class="bg-white p-8 rounded-[28px] shadow-sm">
+            <h2 class="text-2xl font-medium mb-6 text-primary">Key Features</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="space-y-2">
+                    <h4 class="font-medium text-lg text-gray-800">✅ Dynamic Checklists</h4>
+                    <p class="text-gray-600">Transform simple notes into interactive checklists. Completed items
+                        automatically move to the bottom.</p>
+                </div>
+                <div class="space-y-2">
+                    <h4 class="font-medium text-lg text-gray-800">📸 Image Attachments</h4>
+                    <p class="text-gray-600">Enhance your tasks by uploading images directly to any list item. View them
+                        in full-screen detail.</p>
+                </div>
+                <div class="space-y-2">
+                    <h4 class="font-medium text-lg text-gray-800">🤝 Real-time Sharing</h4>
+                    <p class="text-gray-600">Collaborate with others by sharing notes. Control access with Read-Only or
+                        Edit permissions.</p>
+                </div>
+                <div class="space-y-2">
+                    <h4 class="font-medium text-lg text-gray-800">🛡️ Secure Authentication</h4>
+                    <p class="text-gray-600">User data is protected with JWT sessions and bcrypt password hashing. Guest
+                        mode available for quick access.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Methodology -->
+        <section class="bg-white p-8 rounded-[28px] shadow-sm">
+            <h2 class="text-2xl font-medium mb-6 text-primary">Methodology</h2>
+            <div class="space-y-6">
+                <div>
+                    <h4 class="font-medium text-lg mb-2">RESTful API Architecture</h4>
+                    <p class="text-gray-600">
+                        The application follows REST principles, separating client and server concerns.
+                        The backend exposes standard HTTP endpoints (GET, POST, PUT, DELETE) which the frontend consumes
+                        asynchronously.
+                    </p>
+                </div>
+                <div>
+                    <h4 class="font-medium text-lg mb-2">Security & Authentication</h4>
+                    <p class="text-gray-600">
+                        Security is a priority. Passwords are hashed using <strong>bcrypt</strong> before storage.
+                        Session management is handled via <strong>JSON Web Tokens (JWT)</strong>, ensuring stateless and
+                        secure authentication flow.
+                        Role-based access control (RBAC) is implemented to distinguish between standard users and
+                        administrators.
+                    </p>
+                </div>
+                <div>
+                    <h4 class="font-medium text-lg mb-2">Responsive Design</h4>
+                    <p class="text-gray-600">
+                        The UI is built Mobile-First using Tailwind's responsive modifiers, ensuring a seamless
+                        experience across devices from mobile phones to desktops.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="text-center py-6 text-gray-400 text-sm">
+        By Bhanu Pratap
+    </footer>
+
+    <script>
+        // Page Transition
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.classList.remove('opacity-0');
+        });
+
+        // Intercept Back Link
+        document.querySelector('a[href="/"]').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.body.classList.add('opacity-0');
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 100);
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo App</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        surface: '#FFFFFF',
+                        'surface-variant': '#F1F5F9',
+                        primary: '#0056D2',
+                        'on-primary': '#FFFFFF',
+                        secondary: '#000000',
+                        error: '#DC2626'
+                    },
+                    borderRadius: {
+                        'xl': '28px',
+                        '2xl': '32px'
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #F8FAFC;
+        }
+
+        .fab {
+            box-shadow: 0px 4px 8px 3px rgba(0, 0, 0, 0.15), 0px 1px 3px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .fab:hover {
+            box-shadow: 0px 6px 10px 4px rgba(0, 0, 0, 0.15), 0px 2px 3px rgba(0, 0, 0, 0.3);
+            transform: scale(1.05);
+        }
+
+        .note-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .note-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .note-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .btn-anim {
+            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);
+        }
+
+        .btn-anim:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-anim:active {
+            transform: scale(0.97);
+        }
+
+        /* Page Transition */
+        body {
+            transition: opacity 0.1s ease-in-out;
+        }
+    </style>
+</head>
+
+<body class="text-gray-800 h-screen flex flex-col overflow-hidden opacity-0">
+
+    <!-- Auth Section -->
+    <div id="auth-screen"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-[#F8FAFC] transition-opacity duration-100">
+        <div class="bg-white p-8 rounded-[28px] shadow-lg w-full max-w-sm">
+            <div class="flex justify-between items-center mb-2">
+                <h1 id="auth-title" class="text-3xl font-normal text-primary">Welcome</h1>
+                <button onclick="cancelLogin()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            <p id="auth-subtitle" class="text-center text-gray-500 mb-8">Sign in to continue</p>
+
+            <div class="space-y-4">
+                <input type="text" id="username" placeholder="Username"
+                    class="w-full p-4 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-primary outline-none transition-all">
+                <input type="password" id="password" placeholder="Password"
+                    class="w-full p-4 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-primary outline-none transition-all">
+
+                <button id="auth-submit-btn" onclick="handleAuthSubmit()"
+                    class="btn-anim w-full py-4 bg-primary text-on-primary rounded-full hover:bg-opacity-90 font-medium transition-colors">Log
+                    In</button>
+                <button id="auth-toggle-btn" onclick="toggleAuthMode()"
+                    class="btn-anim w-full py-2 text-primary font-medium hover:underline">Create an account</button>
+            </div>
+            <p id="auth-error" class="text-error text-center mt-4 text-sm hidden"></p>
+        </div>
+    </div>
+
+    <!-- App Interface -->
+    <div id="app-screen" class="flex-1 flex flex-col h-full hidden opacity-0 transition-opacity duration-100">
+
+        <!-- Header -->
+        <header class="px-6 py-4 flex justify-between items-center bg-[#F8FAFC]/90 backdrop-blur top-0 z-20 relative">
+            <h1 class="text-2xl font-normal text-gray-800">My Notes</h1>
+
+            <!-- Desktop Nav -->
+            <div class="hidden md:flex items-center gap-4">
+                <span id="user-display"
+                    class="hidden text-gray-600 font-medium border-r border-gray-300 pr-4 mr-2"></span>
+                <a href="/about.html"
+                    class="btn-anim text-primary font-medium px-4 py-2 hover:bg-white/50 rounded-full transition-colors">About</a>
+                <button id="login-btn" onclick="showAuth()"
+                    class="btn-anim text-primary font-medium px-4 py-2 hover:bg-white/50 rounded-full transition-colors">Login</button>
+                <button id="admin-btn" onclick="toggleAdminPanel()"
+                    class="hidden text-primary font-medium hover:bg-white/50 px-4 py-2 rounded-full transition-colors">Admin
+                    Panel</button>
+                <button id="logout-btn" onclick="logout()"
+                    class="btn-anim hidden text-primary font-medium px-4 py-2 hover:bg-white/50 rounded-full transition-colors">Logout</button>
+            </div>
+
+            <!-- Mobile User Display & Hamburger -->
+            <div class="flex items-center gap-3 md:hidden">
+                <span id="mobile-header-user-display" class="hidden text-sm font-medium text-gray-600"></span>
+                <button onclick="toggleMobileMenu()" class="text-gray-800 p-2 focus:outline-none">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 12h16M4 18h16">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Mobile Menu (Dropdown) -->
+        <div id="mobile-menu"
+            class="hidden absolute top-[72px] left-0 w-full bg-white shadow-lg border-b border-gray-100 p-4 flex flex-col gap-4 z-10 md:hidden origin-top transition-all duration-200">
+            <a href="/about.html" class="block text-primary font-medium py-2">About</a>
+            <button id="mobile-login-btn" onclick="showAuth(); toggleMobileMenu()"
+                class="text-left text-primary font-medium py-2">Login</button>
+            <button id="mobile-admin-btn" onclick="toggleAdminPanel(); toggleMobileMenu()"
+                class="hidden text-left text-primary font-medium py-2">Admin Panel</button>
+            <button id="mobile-logout-btn" onclick="logout(); toggleMobileMenu()"
+                class="hidden text-left text-primary font-medium py-2">Logout</button>
+        </div>
+
+        <!-- Admin Panel -->
+        <div id="admin-panel" class="hidden px-6 pb-4">
+            <div class="bg-white rounded-[28px] p-6 shadow-sm mb-4">
+                <h2 class="text-xl font-medium mb-4 text-gray-800">User Management</h2>
+                <div id="user-list" class="space-y-2">
+                    <!-- Users injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Notes Grid -->
+        <main class="flex-1 overflow-y-auto px-4 pb-24">
+            <div id="notes-grid"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto py-4 items-start">
+                <!-- Notes injected here -->
+            </div>
+
+            <div id="empty-state" class="hidden h-full flex flex-col items-center justify-center text-gray-400 mt-20">
+                <p class="text-lg">No notes yet</p>
+            </div>
+        </main>
+
+        <!-- FAB -->
+        <button onclick="openModal()"
+            class="fab btn-anim fixed bottom-8 right-8 w-16 h-16 bg-primary text-on-primary rounded-[20px] flex items-center justify-center text-3xl">
+            +
+        </button>
+    </div>
+
+
+
+    <!-- Hidden File Input -->
+    <input type="file" id="hidden-file-input" class="hidden" accept="image/*" multiple>
+
+    <!-- Image Viewer Modal -->
+    <div id="image-viewer-modal"
+        class="fixed inset-0 z-[60] bg-black/90 hidden flex items-center justify-center backdrop-blur-sm"
+        onclick="closeImageViewer()">
+        <img id="full-image" src=""
+            class="max-w-[90%] max-h-[90%] object-contain rounded-lg shadow-2xl transition-transform duration-300 scale-95 opacity-0">
+        <button onclick="closeImageViewer()"
+            class="absolute top-4 right-4 text-white hover:text-gray-300 text-4xl">&times;</button>
+    </div>
+
+    <!-- Share Note Modal -->
+    <div id="share-modal"
+        class="fixed inset-0 z-[45] bg-black/50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-[28px] p-6 w-full max-w-sm shadow-xl transform transition-all scale-95 opacity-0"
+            id="share-modal-content">
+            <h2 class="text-xl font-medium mb-4 text-gray-800">Share Note</h2>
+            <p class="text-gray-500 mb-4 text-sm">Select a user to share with.</p>
+
+            <div id="share-user-container" class="mb-4">
+                <select id="share-username"
+                    class="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-primary outline-none appearance-none cursor-pointer">
+                    <option value="" disabled selected>Loading users...</option>
+                </select>
+            </div>
+
+            <div class="flex gap-2 mb-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="permission" value="read" checked class="text-primary focus:ring-primary">
+                    <span class="text-gray-700 text-sm">Read Only</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="permission" value="write" class="text-primary focus:ring-primary">
+                    <span class="text-gray-700 text-sm">Can Edit</span>
+                </label>
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <button onclick="closeShareModal()"
+                    class="text-gray-500 hover:bg-gray-100 px-4 py-2 rounded-full font-medium transition-colors">Cancel</button>
+                <button onclick="submitShare()"
+                    class="bg-primary text-white px-6 py-2 rounded-full font-medium hover:bg-blue-600 transition-colors btn-anim">Share</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <div id="note-modal"
+        class="fixed inset-0 z-40 bg-black/50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl transform transition-all scale-95 opacity-0 flex flex-col max-h-[85vh]"
+            id="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="modal-title" class="text-xl font-medium text-gray-700">New Note</h2>
+                <button onclick="closeModal()"
+                    class="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <input type="text" id="note-title" placeholder="Title"
+                class="w-full text-lg font-medium mb-4 p-2 border-b border-gray-200 focus:border-primary outline-none bg-transparent placeholder-gray-400">
+
+            <div id="list-editor" class="flex-1 overflow-y-auto min-h-0 mb-4 space-y-2">
+                <!-- List items injected here -->
+            </div>
+
+            <div id="add-item-form" class="flex items-center gap-2 mb-6">
+                <input type="text" id="new-item-input" placeholder="Add list item"
+                    class="flex-1 p-2 bg-gray-50 rounded-lg outline-none focus:ring-1 focus:ring-primary"
+                    onkeypress="handleAddItem(event)">
+                <button onclick="addItemFromInput()"
+                    class="text-primary hover:bg-primary/10 p-2 rounded-full font-medium text-xl w-10 h-10 flex items-center justify-center">+</button>
+            </div>
+
+            <!-- Hidden textarea for backward compat if needed, or remove if fully migrating -->
+            <textarea id="note-content" class="hidden"></textarea>
+
+            <!-- Footer Actions -->
+            <div id="modal-footer-edit" class="flex justify-end gap-2">
+                <button onclick="closeModal()"
+                    class="btn-anim px-6 py-3 text-primary font-medium hover:bg-gray-50 rounded-full transition-colors">Cancel</button>
+                <button id="save-note-btn" onclick="saveNote()"
+                    class="btn-anim px-6 py-3 bg-primary text-white font-medium rounded-full shadow hover:shadow-lg transition-shadow">Save</button>
+            </div>
+
+            <div id="modal-footer-view" class="hidden flex justify-between items-center w-full pt-2">
+                <span id="modal-date" class="text-sm text-gray-400"></span>
+                <div class="flex gap-2">
+                    <button onclick="triggerShareFromModal()"
+                        class="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-full transition-colors"
+                        title="Share">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z">
+                            </path>
+                        </svg>
+                    </button>
+                    <button onclick="switchToEditMode()"
+                        class="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-full transition-colors"
+                        title="Edit">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                            </path>
+                        </svg>
+                    </button>
+                    <button onclick="triggerDeleteFromModal()"
+                        class="p-2 text-gray-400 hover:text-error hover:bg-error/5 rounded-full transition-colors"
+                        title="Delete">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmation-modal"
+        class="fixed inset-0 z-[60] bg-black/50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-[28px] p-6 w-full max-w-sm shadow-xl transform transition-all scale-95 opacity-0"
+            id="confirmation-modal-content">
+            <h2 id="confirmation-title" class="text-xl font-medium mb-2 text-gray-800">Delete Note?</h2>
+            <p id="confirmation-message" class="text-gray-500 mb-6 text-sm">This action cannot be undone.</p>
+
+            <div class="flex justify-end gap-2">
+                <button onclick="closeConfirmationModal()"
+                    class="btn-anim px-5 py-2.5 text-gray-600 font-medium hover:bg-gray-100 rounded-full transition-colors">Cancel</button>
+                <button id="confirm-btn"
+                    class="btn-anim px-6 py-2.5 bg-error text-white font-medium rounded-full shadow hover:bg-red-700 transition-colors">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Modal (Generic) -->
+    <div id="alert-modal"
+        class="fixed inset-0 z-[70] bg-black/50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-[28px] p-6 w-full max-w-sm shadow-xl transform transition-all scale-95 opacity-0"
+            id="alert-modal-content">
+            <h2 id="alert-title" class="text-xl font-medium mb-2 text-gray-800">Alert</h2>
+            <p id="alert-message" class="text-gray-500 mb-6 text-sm">Something happened.</p>
+
+            <div class="flex justify-end">
+                <button onclick="closeAlertModal()"
+                    class="btn-anim px-6 py-2.5 bg-primary text-white font-medium rounded-full shadow hover:bg-blue-600 transition-colors">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
