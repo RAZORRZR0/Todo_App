@@ -8,7 +8,7 @@ const UserSchema = new mongoose.Schema({
 });
 
 const NoteSchema = new mongoose.Schema({
-    user_id: { type: String, required: true }, // Keeping strict link, Mongoose uses ObjectId internally but we pass strings usually
+    user_id: { type: String, required: true }, // owner's User _id as a string
     title: { type: String },
     content: { type: String },
     items: [{
@@ -22,6 +22,8 @@ const NoteSchema = new mongoose.Schema({
         permission: { type: String, enum: ['read', 'write'], default: 'read' }
     }],
     is_done: { type: Boolean, default: false }, // Keeping for backward compatibility/overall status
+    // Bumped on every edit; a save must quote the version it started from (optimistic locking).
+    version: { type: Number, default: 0 },
     created_at: { type: Date, default: Date.now }
 });
 

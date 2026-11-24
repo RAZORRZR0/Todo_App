@@ -17,6 +17,48 @@ const API_URL = '/api';
 let token = localStorage.getItem('token');
 let allNotes = []; // Store fetched notes for edit access
 let editingNoteId = null; // ID of note currently being edited
+let editingVersion = 0; // Server version the open note was loaded at
+let socket = null; // Live-update connection while logged in
+
+// Headers for API calls. X-Socket-Id lets the server skip echoing our own changes back to us.
+function apiHeaders(json = true) {
+    const h = { 'Authorization': `Bearer ${token}` };
+    if (json) h['Content-Type'] = 'application/json';
+    if (socket && socket.id) h['X-Socket-Id'] = socket.id;
+    return h;
+}
+
+// --- Live updates ---
+let refreshTimer = null;
+function connectSocket() {
+    if (socket || !token || typeof io === 'undefined') return;
+    socket = io({ auth: { token } });
+    socket.on('note:changed', (change) => {
+        // Several changes can arrive together; refetch once.
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => applyRemoteChange(change), 150);
+    });
+    socket.on('connect_error', (err) => {
+        if (err.message === 'unauthorized') logout();
+    });
+}
+
+function disconnectSocket() {
+    if (socket) socket.disconnect();
+    socket = null;
+}
+
+async function applyRemoteChange(change) {
+    await fetchNotes();
+    if (editingNoteId !== change.id) return;
+    if (change.type === 'deleted') {
+        closeModal();
+        return openAlertModal('This note was deleted by its owner.', 'Note removed');
+    }
+    // In view mode, show the new content right away. In edit mode, keep the user's
+    // draft; saving it will hit a version conflict and ask them to review.
+    if (currentModalMode === 'view') openModal(change.id, 'view');
+}
 let isLoginMode = true; // State for Auth Modal
 
 let isNoteReadOnly = false; // Modal is in view mode
@@ -42,6 +84,7 @@ async function checkAuth() {
     if (token) {
         // Optimistic UI: Show App immediately to authenticated user
         showApp(true);
+        connectSocket();
 
         // Restore Admin UI state
         const role = localStorage.getItem('role');
@@ -88,6 +131,7 @@ async function login() {
             }
 
             showApp(true);
+            connectSocket();
             fetchNotes();
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
@@ -129,6 +173,7 @@ async function register() {
 }
 
 function logout() {
+    disconnectSocket();
     token = null;
     localStorage.removeItem('token');
     localStorage.removeItem('username');
@@ -648,7 +693,7 @@ async function deleteNote(id, event) {
             if (token) {
                 const res = await fetch(`${API_URL}/notes/${id}`, {
                     method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: apiHeaders(false)
                 });
                 if (!res.ok) openAlertModal('Only the owner can delete this note.', 'Not deleted');
                 fetchNotes();
@@ -768,10 +813,7 @@ async function submitShare() {
     try {
         const res = await fetch(`${API_URL}/notes/${shareNoteId}/share`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
+            headers: apiHeaders(),
             body: JSON.stringify({ username, permission })
         });
 
@@ -867,6 +909,7 @@ function openModal(noteId = null, mode = 'view') { // mode: 'view' | 'edit' | bo
         if (note) {
             titleInput.value = note.title || '';
             currentListItems = JSON.parse(JSON.stringify(note.items || []));
+            editingVersion = note.version || 0;
             // Migration fallback
             if (currentListItems.length === 0 && note.content) {
                 currentListItems = note.content.split('\n').filter(t => t.trim()).map(text => ({ text, is_done: false }));
@@ -984,10 +1027,19 @@ async function saveNote() {
         try {
             const res = await fetch(editingNoteId ? `${API_URL}/notes/${editingNoteId}` : `${API_URL}/notes`, {
                 method: editingNoteId ? 'PUT' : 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ title, items })
+                headers: apiHeaders(),
+                body: JSON.stringify(editingNoteId ? { title, items, version: editingVersion } : { title, items })
             });
             if (res.status === 401) return logout();
+            if (res.status === 409) {
+                // Keep the draft open; the next save is a deliberate overwrite of the newer version.
+                const data = await res.json();
+                editingVersion = data.note.version;
+                fetchNotes();
+                return openAlertModal(
+                    'Someone else saved this note while you were editing. Your changes are still here: press Save again to replace their version, or Cancel to keep theirs.',
+                    'Edit conflict');
+            }
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 return openAlertModal(data.error || 'Failed to save note.', 'Not saved');
@@ -1015,21 +1067,34 @@ async function saveNote() {
     closeModal();
 }
 
-// Sends a note's items to the server; on failure reloads the server copy so the UI does not lie.
-async function syncNote(note) {
+// Sends a note's items to the server. Saves for the same note run one after another,
+// each quoting the version the previous one produced, so quick clicks don't conflict with each other.
+const syncQueues = {};
+function syncNote(note) {
+    const run = () => sendNote(note);
+    syncQueues[note.id] = (syncQueues[note.id] || Promise.resolve()).then(run, run);
+    return syncQueues[note.id];
+}
+
+async function sendNote(note) {
     try {
         const res = await fetch(`${API_URL}/notes/${note.id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ title: note.title, items: note.items, is_done: note.is_done })
+            headers: apiHeaders(),
+            body: JSON.stringify({ title: note.title, items: note.items, is_done: note.is_done, version: note.version || 0 })
         });
-        if (res.ok) return true;
         const data = await res.json().catch(() => ({}));
-        openAlertModal(data.error || 'Change not saved.', 'Not saved');
+        if (res.ok) {
+            note.version = data.version;
+            if (editingNoteId === note.id) editingVersion = data.version;
+            return true;
+        }
+        openAlertModal(data.error || 'Change not saved.', res.status === 409 ? 'Edit conflict' : 'Not saved');
     } catch (err) {
         openAlertModal('Connection error. Change not saved.', 'Not saved');
     }
-    fetchNotes();
+    await fetchNotes();
+    if (editingNoteId === note.id && currentModalMode === 'view') openModal(note.id, 'view');
     return false;
 }
 

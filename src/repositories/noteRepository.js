@@ -17,7 +17,7 @@ const NoteRepository = {
         const ownerName = Object.fromEntries(owners.map(o => [o._id.toString(), o.username]));
 
         return notes.map(note => {
-            const out = { ...note, id: note._id };
+            const out = { ...note, id: note._id, version: note.version ?? 0 };
             if (note.user_id !== userId) {
                 out.owner_username = ownerName[note.user_id] || 'unknown';
                 const share = note.shared_with.find(s => s.user_id === userId);
@@ -27,28 +27,40 @@ const NoteRepository = {
         });
     },
 
-    // Returns 'ok', 'not_found' or 'forbidden'. Owners and 'write' shares may edit.
-    async updateNote(id, userId, updates) {
-        const note = await Note.findById(id);
-        if (!note) return 'not_found';
+    // Everyone who can see a note: the owner plus everyone it is shared with.
+    audience(note) {
+        return [note.user_id, ...note.shared_with.map(s => s.user_id)];
+    },
+
+    // Compare-and-set update. Owners and 'write' shares may edit.
+    // Returns { status: 'ok' | 'not_found' | 'forbidden' | 'conflict', note }.
+    async updateNote(id, userId, updates, version) {
+        const note = await Note.findById(id).lean();
+        if (!note) return { status: 'not_found' };
 
         const isOwner = note.user_id === userId;
         const isWriter = note.shared_with.some(s => s.user_id === userId && s.permission === 'write');
         if (!isOwner && !isWriter) {
-            return note.shared_with.some(s => s.user_id === userId) ? 'forbidden' : 'not_found';
+            return { status: note.shared_with.some(s => s.user_id === userId) ? 'forbidden' : 'not_found' };
         }
 
-        await Note.updateOne({ _id: id }, { $set: updates });
-        return 'ok';
+        // Notes saved before versioning have no field yet; treat them as version 0.
+        const versionMatch = version === 0 ? { $in: [0, null] } : version;
+        const updated = await Note.findOneAndUpdate(
+            { _id: id, version: versionMatch },
+            { $set: updates, $inc: { version: 1 } },
+            { returnDocument: 'after', lean: true }
+        );
+        if (!updated) return { status: 'conflict', note: { ...note, id: note._id, version: note.version ?? 0 } };
+        return { status: 'ok', note: { ...updated, id: updated._id } };
     },
 
-    // Only the owner can delete. Returns true if a note was deleted.
+    // Only the owner can delete. Returns the deleted note, or null.
     async deleteNote(id, userId) {
-        const result = await Note.deleteOne({ _id: id, user_id: userId });
-        return result.deletedCount > 0;
+        return Note.findOneAndDelete({ _id: id, user_id: userId }).lean();
     },
 
-    // Returns false if the note does not exist or the caller is not its owner.
+    // Returns the updated note, or false if it does not exist or the caller is not its owner.
     async shareNote(noteId, ownerId, targetUser, permission) {
         const note = await Note.findOne({ _id: noteId, user_id: ownerId });
         if (!note) return false;
@@ -61,7 +73,7 @@ const NoteRepository = {
             note.shared_with.push({ user_id: targetId, username: targetUser.username, permission });
         }
         await note.save();
-        return true;
+        return note.toObject();
     },
 
     // Called when a user is deleted: drop their notes and their access to others' notes.

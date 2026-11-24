@@ -2,6 +2,7 @@ require('dotenv').config({ quiet: true });
 const { PORT, JWT_SECRET } = require('./src/config');
 require('./src/db/database');
 const express = require('express');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -15,6 +16,7 @@ const NoteRepository = require('./src/repositories/noteRepository');
 const authenticateToken = require('./src/middleware/authMiddleware');
 const adminMiddleware = require('./src/middleware/adminMiddleware');
 const validate = require('./src/validate');
+const realtime = require('./src/realtime');
 
 const app = express();
 const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
@@ -136,6 +138,7 @@ app.post('/api/notes', authenticateToken, async (req, res) => {
     const { value, error } = validate.note(req.body);
     if (error) return res.status(400).json({ error });
     const note = await NoteRepository.createNote({ ...value, user_id: req.user.id });
+    realtime.notify([req.user.id], { id: note.id, type: 'created' }, req.get('X-Socket-Id'));
     res.status(201).json(note);
 });
 
@@ -143,16 +146,26 @@ app.put('/api/notes/:id', authenticateToken, async (req, res) => {
     const { value, error } = validate.note(req.body);
     if (error) return res.status(400).json({ error });
 
-    const result = await NoteRepository.updateNote(req.params.id, req.user.id, value);
-    if (result === 'not_found') return res.status(404).json({ error: 'Note not found' });
-    if (result === 'forbidden') return res.status(403).json({ error: 'You have read-only access to this note' });
-    res.json({ message: 'Note updated' });
+    const { version } = req.body;
+    if (!Number.isInteger(version) || version < 0) {
+        return res.status(400).json({ error: 'version (the note version you edited) is required' });
+    }
+
+    const { status, note } = await NoteRepository.updateNote(req.params.id, req.user.id, value, version);
+    if (status === 'not_found') return res.status(404).json({ error: 'Note not found' });
+    if (status === 'forbidden') return res.status(403).json({ error: 'You have read-only access to this note' });
+    if (status === 'conflict') {
+        // Someone saved first. Send their version so the client can show it instead of overwriting it.
+        return res.status(409).json({ error: 'This note was changed by someone else. Showing the latest version.', note });
+    }
+    realtime.notify(NoteRepository.audience(note), { id: note.id, type: 'updated', version: note.version }, req.get('X-Socket-Id'));
+    res.json({ message: 'Note updated', version: note.version });
 });
 
 app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
-    if (!(await NoteRepository.deleteNote(req.params.id, req.user.id))) {
-        return res.status(404).json({ error: 'Note not found' });
-    }
+    const note = await NoteRepository.deleteNote(req.params.id, req.user.id);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    realtime.notify(NoteRepository.audience(note), { id: req.params.id, type: 'deleted' }, req.get('X-Socket-Id'));
     res.json({ message: 'Note deleted' });
 });
 
@@ -166,9 +179,9 @@ app.post('/api/notes/:id/share', authenticateToken, async (req, res) => {
     const target = await UserRepository.findUserByUsername(username);
     if (!target) return res.status(404).json({ error: 'User not found' });
 
-    if (!(await NoteRepository.shareNote(req.params.id, req.user.id, target, permission))) {
-        return res.status(404).json({ error: 'Note not found or you are not the owner' });
-    }
+    const note = await NoteRepository.shareNote(req.params.id, req.user.id, target, permission);
+    if (!note) return res.status(404).json({ error: 'Note not found or you are not the owner' });
+    realtime.notify(NoteRepository.audience(note), { id: req.params.id, type: 'shared' }, req.get('X-Socket-Id'));
     res.json({ message: `Note shared with ${target.username}` });
 });
 
@@ -180,8 +193,11 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
+const server = http.createServer(app);
+realtime.attach(server);
+
 if (require.main === module) {
-    app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+    server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 }
 
-module.exports = app;
+module.exports = { app, server };

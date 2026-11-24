@@ -8,14 +8,16 @@ process.env.JWT_SECRET = 'test-secret';
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
-const app = require('../server');
+const { server: httpServer } = require('../server');
+const { io: ioClient } = require('socket.io-client');
 const { User } = require('../src/db/models');
 
 const PASSWORD = 'correct-horse-1';
-let server, url;
+let url;
 
-async function call(method, path, { token, body, form } = {}) {
+async function call(method, path, { token, body, form, socketId } = {}) {
     const headers = {};
+    if (socketId) headers['X-Socket-Id'] = socketId;
     if (token) headers.Authorization = `Bearer ${token}`;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const res = await fetch(url + path, { method, headers, body: form ?? (body !== undefined ? JSON.stringify(body) : undefined) });
@@ -33,12 +35,12 @@ async function signup(username) {
 
 before(async () => {
     await mongoose.connection.asPromise();
-    server = app.listen(0);
-    url = `http://127.0.0.1:${server.address().port}`;
+    await new Promise(r => httpServer.listen(0, '127.0.0.1', r));
+    url = `http://127.0.0.1:${httpServer.address().port}`;
 });
 
 after(async () => {
-    server.close();
+    httpServer.close();
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
 });
@@ -77,16 +79,20 @@ test('note CRUD with validation', async () => {
     assert.equal(created.data.title, 'Groceries');
     const id = created.data.id;
 
-    const upd = await call('PUT', `/api/notes/${id}`, { token: t, body: { title: 'Groceries', items: [{ text: 'milk', is_done: true }] } });
+    assert.equal(created.data.version, 0);
+    const done = { title: 'Groceries', items: [{ text: 'milk', is_done: true }] };
+    assert.equal((await call('PUT', `/api/notes/${id}`, { token: t, body: done })).status, 400); // version required
+    const upd = await call('PUT', `/api/notes/${id}`, { token: t, body: { ...done, version: 0 } });
     assert.equal(upd.status, 200);
+    assert.equal(upd.data.version, 1);
     // Saving the same content again is not a 404.
-    assert.equal((await call('PUT', `/api/notes/${id}`, { token: t, body: { title: 'Groceries', items: [{ text: 'milk', is_done: true }] } })).status, 200);
+    assert.equal((await call('PUT', `/api/notes/${id}`, { token: t, body: { ...done, version: 1 } })).status, 200);
 
     const notes = (await call('GET', '/api/notes', { token: t })).data;
     assert.equal(notes.length, 1);
     assert.equal(notes[0].items[0].is_done, true);
 
-    assert.equal((await call('PUT', '/api/notes/not-an-id', { token: t, body: { title: 'x' } })).status, 404);
+    assert.equal((await call('PUT', '/api/notes/not-an-id', { token: t, body: { title: 'x', version: 0 } })).status, 404);
     assert.equal((await call('DELETE', `/api/notes/${id}`, { token: t })).status, 200);
     assert.equal((await call('DELETE', `/api/notes/${id}`, { token: t })).status, 404);
 });
@@ -109,7 +115,7 @@ test('sharing: read-only users cannot edit, strangers cannot see', async () => {
     assert.equal(seen[0].owner_username, 'owner1');
     assert.equal(seen[0].user_permission, 'read');
 
-    const edit = { title: 'Plan', items: [{ text: 'changed' }] };
+    const edit = { title: 'Plan', items: [{ text: 'changed' }], version: 0 };
     assert.equal((await call('PUT', `/api/notes/${id}`, { token: reader, body: edit })).status, 403);
     assert.equal((await call('PUT', `/api/notes/${id}`, { token: stranger, body: edit })).status, 404);
     assert.equal((await call('PUT', `/api/notes/${id}`, { token: writer, body: edit })).status, 200);
@@ -161,4 +167,74 @@ test('uploads accept images only and set security headers', async () => {
 
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
     assert.equal((await call('POST', '/api/upload', { form: ok })).status, 401);
+});
+
+test('concurrent edits: the second save with a stale version gets 409 and the latest note', async () => {
+    const owner = await signup('conf_owner');
+    const editor = await signup('conf_editor');
+    const id = (await call('POST', '/api/notes', { token: owner, body: { title: 'Shared', items: [{ text: 'a' }] } })).data.id;
+    await call('POST', `/api/notes/${id}/share`, { token: owner, body: { username: 'conf_editor', permission: 'write' } });
+
+    // Both opened the note at version 0.
+    const first = await call('PUT', `/api/notes/${id}`, { token: editor, body: { title: 'Shared', items: [{ text: 'editor wins' }], version: 0 } });
+    assert.equal(first.status, 200);
+    const second = await call('PUT', `/api/notes/${id}`, { token: owner, body: { title: 'Shared', items: [{ text: 'owner loses' }], version: 0 } });
+    assert.equal(second.status, 409);
+    assert.equal(second.data.note.version, 1);
+    assert.equal(second.data.note.items[0].text, 'editor wins');
+
+    // Retrying with the version from the conflict is a deliberate overwrite and succeeds.
+    const retry = await call('PUT', `/api/notes/${id}`, { token: owner, body: { title: 'Shared', items: [{ text: 'owner overwrites' }], version: 1 } });
+    assert.equal(retry.status, 200);
+    assert.equal(retry.data.version, 2);
+
+    // Simultaneous saves from the same version: exactly one wins.
+    const results = await Promise.all([0, 1, 2, 3, 4].map(n =>
+        call('PUT', `/api/notes/${id}`, { token: owner, body: { title: 'Race', items: [{ text: `w${n}` }], version: 2 } })));
+    assert.deepEqual(results.map(r => r.status).sort(), [200, 409, 409, 409, 409]);
+});
+
+function connect(token) {
+    return new Promise((resolve, reject) => {
+        const s = ioClient(url, { auth: { token }, transports: ['websocket'], reconnection: false });
+        s.on('connect', () => resolve(s));
+        s.on('connect_error', reject);
+    });
+}
+
+function nextEvent(socket, ms = 1000) {
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(null), ms);
+        socket.once('note:changed', (e) => { clearTimeout(timer); resolve(e); });
+    });
+}
+
+test('live updates reach collaborators, not strangers or the sender', async () => {
+    await assert.rejects(connect('bad-token'), /unauthorized/);
+
+    const owner = await signup('live_owner');
+    const friend = await signup('live_friend');
+    const stranger = await signup('live_stranger');
+    const [ownerSock, friendSock, strangerSock] = await Promise.all([connect(owner), connect(friend), connect(stranger)]);
+    try {
+        const id = (await call('POST', '/api/notes', { token: owner, body: { title: 'Live', items: [] } })).data.id;
+
+        let got = nextEvent(friendSock);
+        await call('POST', `/api/notes/${id}/share`, { token: owner, body: { username: 'live_friend', permission: 'write' } });
+        assert.deepEqual(await got, { id, type: 'shared' });
+
+        const friendGot = nextEvent(friendSock);
+        const ownerGot = nextEvent(ownerSock, 300);
+        const strangerGot = nextEvent(strangerSock, 300);
+        await call('PUT', `/api/notes/${id}`, { token: owner, socketId: ownerSock.id, body: { title: 'Live', items: [{ text: 'new' }], version: 0 } });
+        assert.deepEqual(await friendGot, { id, type: 'updated', version: 1 });
+        assert.equal(await ownerGot, null, 'sender is not echoed');
+        assert.equal(await strangerGot, null, 'stranger hears nothing');
+
+        got = nextEvent(friendSock);
+        await call('DELETE', `/api/notes/${id}`, { token: owner });
+        assert.deepEqual(await got, { id, type: 'deleted' });
+    } finally {
+        [ownerSock, friendSock, strangerSock].forEach(s => s.close());
+    }
 });
