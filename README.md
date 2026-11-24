@@ -47,7 +47,7 @@ sequenceDiagram
 - JWTs are signed with `JWT_SECRET`. There is no hard-coded fallback: if the secret is unset, each run makes a random one.
 - Every request body is validated before it reaches MongoDB. Usernames and IDs must be strings, so `{"$ne": null}` style injection is rejected, and only known note fields are stored.
 - Note text is escaped before rendering, so a shared note can't run script in the other user's browser.
-- Uploads are checked by MIME type and size. The server picks the file name and extension, so a `.html` or `.svg` file can't be served from the app.
+- Uploads are checked by MIME type and size, then stored in MongoDB under a random 128-bit key and served with the checked type plus `nosniff`. A `.html` or `.svg` file can't be served from the app.
 - Admin user lists never include password hashes, and server errors never send internals to the client.
 
 ## Run it
@@ -66,6 +66,16 @@ Create an admin account:
 npm run create-admin -- <username> <password>
 ```
 
+Set `DEMO_MODE=true` to seed a `demo` login, plus a `teammate` login that shares a note with it. Both logins are shown on the sign-in screen.
+
+## Deploy (Render + MongoDB Atlas, free tiers)
+
+1. In MongoDB Atlas, create a free M0 cluster and a database user. Under Network Access, allow `0.0.0.0/0`, because Render's free plan has no fixed IP. Copy the connection string and add a database name, for example `.../todonotes?retryWrites=true`.
+2. On Render, choose **New > Blueprint** and pick this repo. [render.yaml](render.yaml) creates the web service, generates `JWT_SECRET` and turns on demo mode.
+3. Paste the Atlas connection string as `MONGO_URI` and deploy. Render checks `/healthz`, which reports whether the database is reachable.
+
+Images are stored in MongoDB rather than on disk, because free hosts wipe the disk on every restart. Free Render instances sleep after 15 minutes idle, so the first visit takes about 30 seconds.
+
 `share.sh` opens a temporary public URL for your local server through Cloudflare Tunnel. It installs `cloudflared` with Homebrew if it's missing.
 
 ## Tests
@@ -74,7 +84,7 @@ npm run create-admin -- <username> <password>
 npm test                      # needs MongoDB on 127.0.0.1:27017, or set MONGO_URL
 ```
 
-The 9 API tests cover:
+The 10 API tests cover:
 
 - registration rules
 - login injection and lockout
@@ -85,6 +95,7 @@ The 9 API tests cover:
 - upload type and size limits
 - version conflicts, including a 5-way race
 - socket auth and who receives live updates
+- health check and demo seeding
 
 GitHub Actions runs them on every push against a MongoDB service container.
 
@@ -110,6 +121,8 @@ server.js                 routes, upload handling, login throttle
 src/config.js             environment settings
 src/validate.js           request body validation
 src/realtime.js           Socket.IO auth, per-user rooms, change notifications
+src/demo.js               demo accounts and sample notes (DEMO_MODE)
+render.yaml               Render deploy blueprint
 src/db/                   Mongoose connection and schemas
 src/repositories/         data access for users and notes
 src/middleware/           JWT auth and admin check
@@ -122,5 +135,5 @@ test/api.test.js          API tests (node:test)
 
 - The login throttle and Socket.IO rooms are in memory, so they only work with a single server process. Running several would need Redis (rate limits plus the Socket.IO Redis adapter).
 - Conflicts are detected per note, not merged per item: the second saver chooses to overwrite or discard.
-- Uploaded images are public to anyone who knows the URL. File names are random, but there is no per-note access check.
+- Anyone who has an image's URL can open it. The key is random, but there is no per-note access check. Images removed from a note stay stored until their owner is deleted.
 - Tailwind is loaded from its CDN, which is meant for development. A production build would compile the CSS.

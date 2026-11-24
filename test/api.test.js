@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const base = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017';
 process.env.MONGO_URI = `${base}/notes_test_${process.pid}`;
 process.env.JWT_SECRET = 'test-secret';
+process.env.DEMO_MODE = 'true';
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
@@ -162,8 +163,15 @@ test('uploads accept images only and set security headers', async () => {
     ok.append('image', new Blob([png], { type: 'image/png' }), 'photo.svg');
     const r = await call('POST', '/api/upload', { token: t, form: ok });
     assert.equal(r.status, 200);
-    assert.match(r.data.url, /^\/uploads\/[\d-]+\.png$/); // extension from the type, not the client's name
-    require('fs').rmSync(require('path').join(__dirname, '..', 'public', r.data.url));
+    assert.match(r.data.url, /^\/api\/images\/[0-9a-f]{32}$/);
+
+    // Served back with the checked type (not the client's .svg name), and storable on a note.
+    const img = await fetch(url + r.data.url);
+    assert.equal(img.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await img.arrayBuffer()), png);
+    assert.equal((await fetch(url + '/api/images/' + '0'.repeat(32))).status, 404);
+    const note = await call('POST', '/api/notes', { token: t, body: { title: 'pic', items: [{ text: 'a', images: [r.data.url] }] } });
+    assert.equal(note.status, 201);
 
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
     assert.equal((await call('POST', '/api/upload', { form: ok })).status, 401);
@@ -237,4 +245,20 @@ test('live updates reach collaborators, not strangers or the sender', async () =
     } finally {
         [ownerSock, friendSock, strangerSock].forEach(s => s.close());
     }
+});
+
+test('health check and demo seed', async () => {
+    assert.deepEqual((await call('GET', '/healthz')).data, { status: 'ok' });
+
+    const demo = require('../src/demo');
+    await demo.seed();
+    await demo.seed(); // second run must not duplicate anything
+    const cfg = (await call('GET', '/api/config')).data;
+    assert.equal(cfg.demo, true);
+
+    const login = await call('POST', '/api/auth/login', { body: cfg.demoLogin });
+    assert.equal(login.status, 200);
+    const notes = (await call('GET', '/api/notes', { token: login.data.token })).data;
+    assert.equal(notes.length, 3);
+    assert.equal(notes.filter(n => n.owner_username === 'teammate').length, 1);
 });

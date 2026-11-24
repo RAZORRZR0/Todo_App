@@ -106,6 +106,13 @@
                     class="btn-anim w-full py-2 text-primary font-medium hover:underline">Create an account</button>
             </div>
             <p id="auth-error" class="text-error text-center mt-4 text-sm hidden"></p>
+            <div id="demo-hint" class="hidden mt-6 p-4 bg-gray-50 rounded-xl text-sm text-gray-600">
+                <p class="mb-2"><span class="font-medium text-gray-800">Demo:</span> log in as
+                    <code id="demo-user"></code> / <code id="demo-pass"></code></p>
+                <p class="mb-3">To see live sync, open a private window and log in as
+                    <code>teammate</code> / <code>teammate-pass-2026</code>.</p>
+                <button onclick="useDemoLogin()" class="text-primary font-medium hover:underline">Fill in demo login</button>
+            </div>
         </div>
     </div>
 

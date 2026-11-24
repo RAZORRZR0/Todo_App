@@ -1,7 +1,7 @@
 // Input checks for request bodies. Each returns { value } or { error }.
 
 const USERNAME = /^[A-Za-z0-9_.-]{3,32}$/;
-const UPLOAD_URL = /^\/uploads\/[A-Za-z0-9-]+\.(png|jpg|gif|webp)$/;
+const UPLOAD_URL = /^\/api\/images\/[0-9a-f]{32}$/;
 const LIMITS = { title: 200, itemText: 1000, items: 200, images: 10 };
 
 function credentials(body) {

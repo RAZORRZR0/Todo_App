@@ -3,7 +3,6 @@ const { PORT, JWT_SECRET } = require('./src/config');
 require('./src/db/database');
 const express = require('express');
 const http = require('http');
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
@@ -16,11 +15,19 @@ const NoteRepository = require('./src/repositories/noteRepository');
 const authenticateToken = require('./src/middleware/authMiddleware');
 const adminMiddleware = require('./src/middleware/adminMiddleware');
 const validate = require('./src/validate');
+const { Image } = require('./src/db/models');
+const demo = require('./src/demo');
 const realtime = require('./src/realtime');
 
 const app = express();
-const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// Behind a host's proxy (Render, Heroku...), use the real client IP for the login throttle.
+if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY));
+
+app.get('/healthz', (req, res) => {
+    const db = mongoose.connection.readyState === 1;
+    res.status(db ? 200 : 503).json({ status: db ? 'ok' : 'db unavailable' });
+});
+app.get('/api/config', (req, res) => res.json({ demo: demo.enabled, demoLogin: demo.enabled ? demo.LOGIN : null }));
 
 app.use((req, res, next) => {
     res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer' });
@@ -35,26 +42,39 @@ app.param('id', (req, res, next, id) => {
     next();
 });
 
-// --- Image uploads: images only, 5 MB max, name chosen by the server ---
-const IMAGE_TYPES = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
+// --- Image uploads: images only, 5 MB max, stored in MongoDB under a random key ---
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const upload = multer({
-    storage: multer.diskStorage({
-        destination: UPLOAD_DIR,
-        filename: (req, file, cb) => cb(null, `${Date.now()}-${crypto.randomInt(1e9)}${IMAGE_TYPES[file.mimetype]}`),
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024, files: 1 },
-    fileFilter: (req, file, cb) => cb(null, file.mimetype in IMAGE_TYPES),
+    fileFilter: (req, file, cb) => cb(null, IMAGE_TYPES.includes(file.mimetype)),
 });
 
 app.post('/api/upload', authenticateToken, (req, res) => {
-    upload.single('image')(req, res, (err) => {
+    upload.single('image')(req, res, async (err) => {
         if (err) {
             const tooBig = err.code === 'LIMIT_FILE_SIZE';
             return res.status(tooBig ? 413 : 400).json({ error: tooBig ? 'Image must be 5 MB or less' : 'Upload failed' });
         }
         if (!req.file) return res.status(400).json({ error: 'Upload a PNG, JPEG, GIF or WebP image' });
-        res.json({ url: `/uploads/${req.file.filename}` });
+        try {
+            const key = crypto.randomBytes(16).toString('hex');
+            await Image.create({ key, owner: req.user.id, type: req.file.mimetype, data: req.file.buffer });
+            res.json({ url: `/api/images/${key}` });
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ error: 'Upload failed' });
+        }
     });
+});
+
+// Public by unguessable key, because <img> tags cannot send the Authorization header.
+app.get('/api/images/:key', async (req, res) => {
+    if (!/^[0-9a-f]{32}$/.test(req.params.key)) return res.status(404).end();
+    const img = await Image.findOne({ key: req.params.key }, 'type data');
+    if (!img) return res.status(404).end();
+    res.set({ 'Content-Type': img.type, 'Cache-Control': 'private, max-age=31536000, immutable' });
+    res.send(img.data);
 });
 
 // --- Auth ---
@@ -120,6 +140,7 @@ app.delete('/api/admin/users/:id', authenticateToken, adminMiddleware, async (re
 
     await UserRepository.deleteUser(user.id);
     await NoteRepository.removeUser(user.id);
+    await Image.deleteMany({ owner: user.id });
     res.json({ message: 'User deleted' });
 });
 
@@ -197,6 +218,7 @@ const server = http.createServer(app);
 realtime.attach(server);
 
 if (require.main === module) {
+    demo.seed().catch(err => console.error('Demo seed failed:', err.message));
     server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 }
 

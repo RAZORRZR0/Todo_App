@@ -27,11 +27,23 @@ const NoteSchema = new mongoose.Schema({
     created_at: { type: Date, default: Date.now }
 });
 
+// Uploaded images live in MongoDB so they survive restarts on hosts with throwaway disks.
+// shortcut: images removed from a note stay stored until their owner is deleted; add a cleanup job if storage matters.
+const ImageSchema = new mongoose.Schema({
+    key: { type: String, required: true, unique: true }, // random, unguessable id used in the URL
+    owner: { type: String, required: true },
+    type: { type: String, required: true },
+    data: { type: Buffer, required: true },
+    created_at: { type: Date, default: Date.now }
+});
+
 // Create Models
 const User = mongoose.model('User', UserSchema);
 const Note = mongoose.model('Note', NoteSchema);
+const Image = mongoose.model('Image', ImageSchema);
 
 module.exports = {
     User,
-    Note
+    Note,
+    Image
 };

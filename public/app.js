@@ -1098,5 +1098,21 @@ async function sendNote(note) {
     return false;
 }
 
+// Public demo deployments show their sample login on the auth screen.
+let demoLogin = null;
+fetch(`${API_URL}/config`).then(r => r.json()).then(cfg => {
+    if (!cfg.demo) return;
+    demoLogin = cfg.demoLogin;
+    document.getElementById('demo-user').textContent = demoLogin.username;
+    document.getElementById('demo-pass').textContent = demoLogin.password;
+    document.getElementById('demo-hint').classList.remove('hidden');
+}).catch(() => {});
+
+function useDemoLogin() {
+    if (!demoLogin) return;
+    document.getElementById('username').value = demoLogin.username;
+    document.getElementById('password').value = demoLogin.password;
+}
+
 // Init
 checkAuth();
