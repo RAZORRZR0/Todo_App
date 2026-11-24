@@ -218,7 +218,8 @@ const server = http.createServer(app);
 realtime.attach(server);
 
 if (require.main === module) {
-    demo.seed().catch(err => console.error('Demo seed failed:', err.message));
+    // Seed once the database is reachable (the first connection may need retries).
+    mongoose.connection.once('open', () => demo.seed().catch(err => console.error('Demo seed failed:', err.message)));
     server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 }
 
